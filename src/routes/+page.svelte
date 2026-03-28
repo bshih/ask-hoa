@@ -2,6 +2,8 @@
   import { tick } from 'svelte';
   import { marked } from 'marked';
 
+  let { data } = $props();
+
   marked.use({
     breaks: true,
     renderer: {
@@ -164,6 +166,15 @@
 
     <div bind:this={bottomEl}></div>
   </div>
+
+  {#if data.sources.length > 0}
+    <footer class="sources">
+      <span class="sources-label">Sources</span>
+      {#each data.sources as src}
+        <a href={src.href} target="_blank" rel="noopener noreferrer">{src.name}</a>
+      {/each}
+    </footer>
+  {/if}
 
   <form class="input-row" onsubmit={(e) => { e.preventDefault(); send(); }}>
     <textarea
@@ -375,6 +386,39 @@
   @keyframes bounce {
     0%, 60%, 100% { transform: translateY(0); }
     30% { transform: translateY(-5px); }
+  }
+
+  .sources {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.5rem;
+    font-size: 0.78rem;
+    color: #8a8476;
+  }
+
+  .sources-label {
+    font-weight: 600;
+    color: #6b6860;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.7rem;
+    margin-right: 0.2rem;
+  }
+
+  .sources a {
+    color: #2c5f2e;
+    text-decoration: none;
+    background: #dff0df;
+    border: 1px solid #b5d9b6;
+    border-radius: 4px;
+    padding: 0.1em 0.45em;
+    transition: background 0.12s;
+  }
+
+  .sources a:hover {
+    background: #c8e6c9;
   }
 
   .input-row {
