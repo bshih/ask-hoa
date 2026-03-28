@@ -23,6 +23,7 @@
 	"dependencies": {
 		"@sveltejs/adapter-vercel": "^6.3.3",
 		"dotenv": "^17.3.1",
+		"marked": "^17.0.5",
 		"openai": "^6.33.0"
 	}
 }

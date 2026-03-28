@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import OpenAI from 'openai';
 
-const DOCS_DIR = path.resolve('docs');
+const DOCS_DIR = path.resolve('static/docs');
 const SYSTEM_PROMPT =
   'You are a strict compliance assistant for a homeowners association. ' +
   'Answer using ONLY the provided CC&R document. ' +
@@ -31,7 +31,7 @@ async function main() {
   const pdfs = fs.readdirSync(DOCS_DIR).filter((f) => f.endsWith('.pdf'));
   if (pdfs.length === 0) {
     console.error(`No PDFs found in ${DOCS_DIR}/`);
-    console.error('Copy your CC&R documents there and re-run.');
+    console.error('Copy your CC&R documents to static/docs/ and re-run.');
     process.exit(1);
   }
   console.log(`Found ${pdfs.length} PDF(s): ${pdfs.join(', ')}`);

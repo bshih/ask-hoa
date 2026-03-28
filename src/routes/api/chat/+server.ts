@@ -30,7 +30,7 @@ async function getFileNameMap(): Promise<Record<string, string>> {
 }
 
 /**
- * Replace 【x:y†source】 markers with [Document Name] using the file map.
+ * Replace 【x:y†source】 markers with markdown links [Name](/docs/file.pdf).
  * Falls back to stripping the marker if the file ID isn't found.
  */
 function resolveAnnotations(
@@ -41,8 +41,13 @@ function resolveAnnotations(
   let result = text;
   for (const ann of annotations) {
     if (ann.type === 'file_citation') {
-      const name = fileMap[ann.file_citation.file_id] ?? 'source';
-      result = result.replace(ann.text, ` [${name}]`);
+      const name = fileMap[ann.file_citation.file_id];
+      if (name) {
+        const href = `/docs/${encodeURIComponent(name)}.pdf`;
+        result = result.replace(ann.text, ` [${name}](${href})`);
+      } else {
+        result = result.replace(ann.text, '');
+      }
     }
   }
   // Strip any remaining unresolved markers

@@ -18,8 +18,7 @@ Thumbs.db
 !.env.example
 !.env.test
 
-# CC&R source documents (keep local, never commit)
-/docs/
+# docs/ is now unused — PDFs live in static/docs/ and are committed for Vercel deployment
 
 # Vite
 vite.config.js.timestamp-*

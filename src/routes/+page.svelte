@@ -1,5 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { marked } from 'marked';
+
+  marked.use({ breaks: true });
 
   type Message = {
     role: 'user' | 'assistant';
@@ -136,6 +139,8 @@
             <span class="typing">
               <span></span><span></span><span></span>
             </span>
+          {:else if msg.role === 'assistant'}
+            <div class="md">{@html marked.parse(msg.text)}</div>
           {:else}
             {msg.text}
           {/if}
@@ -261,7 +266,46 @@
     border-radius: 16px;
     font-size: 0.95rem;
     line-height: 1.55;
-    white-space: pre-wrap;
+  }
+
+  /* Markdown content inside assistant bubbles */
+  .bubble .md :global(p) { margin: 0 0 0.6em; }
+  .bubble .md :global(p:last-child) { margin-bottom: 0; }
+  .bubble .md :global(strong) { font-weight: 600; }
+  .bubble .md :global(em) { font-style: italic; }
+  .bubble .md :global(ul),
+  .bubble .md :global(ol) {
+    padding-left: 1.4em;
+    margin: 0.4em 0 0.6em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+  }
+  .bubble .md :global(li) { line-height: 1.5; }
+
+  /* Citation links — styled as small document badges */
+  .bubble .md :global(a) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #2c5f2e;
+    background: #dff0df;
+    border: 1px solid #b5d9b6;
+    border-radius: 4px;
+    padding: 0.1em 0.45em;
+    text-decoration: none;
+    white-space: nowrap;
+    vertical-align: middle;
+    transition: background 0.12s;
+  }
+  .bubble .md :global(a::before) {
+    content: '📄';
+    font-size: 0.75em;
+  }
+  .bubble .md :global(a:hover) {
+    background: #c8e6c9;
   }
 
   .message.user .bubble {
