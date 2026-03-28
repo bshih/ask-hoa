@@ -10,7 +10,7 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
  * before sending text to the client.
  */
 function stripAnnotations(text: string): string {
-  return text.replace(/【\d+:\d+†[^】]*】/g, '').trim();
+  return text.replace(/【\d+:\d+†[^】]*】/g, '');
 }
 
 export const POST: RequestHandler = async ({ request }) => {
