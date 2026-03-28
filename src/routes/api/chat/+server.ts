@@ -103,9 +103,9 @@ export const POST: RequestHandler = async ({ request }) => {
     content: body.message,
   });
 
-  // Ground the model on exact document names to prevent hallucinated citations
+  // Ground the model: exact doc names + strict no-hallucination reminder
   const docList = Object.values(fileMap).sort().map(n => `- ${n}`).join('\n');
-  const additional_instructions = `The following documents are available. When citing a source, use the EXACT document name as listed here — do not paraphrase, abbreviate, or invent names:\n${docList}`;
+  const additional_instructions = `Available documents (use EXACT names — do not paraphrase or invent):\n${docList}\n\nCRITICAL: If file_search does not return a passage that directly answers the question, respond ONLY with "The governing documents do not address this topic." Never fill in answers from general HOA knowledge or common rules.`;
 
   const stream = await openai.beta.threads.runs.stream(activeThread.id, {
     assistant_id: ASSISTANT_ID,
