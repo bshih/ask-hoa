@@ -74,8 +74,12 @@ function linkifyInlineCitations(text: string, fileMap: Record<string, string>): 
       if (score > bestScore) { bestScore = score; best = f; }
     }
 
-    // Require at least one keyword match to avoid false positives
-    return best && bestScore >= 0.4 ? `[(${inner})](${best.href})` : match;
+    if (best && bestScore >= 0.4) {
+      // Replace the hallucinated/paraphrased doc name with the canonical filename
+      const rest = inner.slice(docPart.length); // e.g., ", Item 1"
+      return `[(${best.name}${rest})](${best.href})`;
+    }
+    return match;
   });
 }
 
@@ -99,8 +103,13 @@ export const POST: RequestHandler = async ({ request }) => {
     content: body.message,
   });
 
+  // Ground the model on exact document names to prevent hallucinated citations
+  const docList = Object.values(fileMap).sort().map(n => `- ${n}`).join('\n');
+  const additional_instructions = `The following documents are available. When citing a source, use the EXACT document name as listed here — do not paraphrase, abbreviate, or invent names:\n${docList}`;
+
   const stream = await openai.beta.threads.runs.stream(activeThread.id, {
     assistant_id: ASSISTANT_ID,
+    additional_instructions,
   });
 
   const encoder = new TextEncoder();
