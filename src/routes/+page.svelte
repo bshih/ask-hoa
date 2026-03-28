@@ -75,6 +75,13 @@
               messages = messages; // trigger reactivity
               await scrollToBottom();
             }
+          } else if (payload.type === 'replace') {
+            const last = messages[messages.length - 1];
+            if (last?.role === 'assistant') {
+              last.text = payload.text;
+              messages = messages;
+              await scrollToBottom();
+            }
           } else if (payload.type === 'error') {
             const last = messages[messages.length - 1];
             if (last?.role === 'assistant') {

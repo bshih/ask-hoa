@@ -29,29 +29,50 @@ async function getFileNameMap(): Promise<Record<string, string>> {
   return map;
 }
 
+// Stopwords to ignore when matching citation text to filenames
+const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'its']);
+
+function tokenize(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !STOPWORDS.has(w))
+  );
+}
+
+function overlapScore(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0) return 0;
+  let count = 0;
+  for (const w of a) if (b.has(w)) count++;
+  return count / a.size;
+}
+
 /**
- * Replace 【x:y†source】 markers with markdown links [Name](/docs/file.pdf).
- * Falls back to stripping the marker if the file ID isn't found.
+ * Find inline citations like "(Parking & Towing Policy, Item 1)" and wrap them
+ * as markdown links by fuzzy-matching the doc name part to the file map.
+ * Annotations from file_search are empty when the model writes explicit inline
+ * citations, so we match by keyword overlap instead.
  */
-function resolveAnnotations(
-  text: string,
-  annotations: OpenAI.Beta.Threads.Messages.Annotation[],
-  fileMap: Record<string, string>
-): string {
-  let result = text;
-  for (const ann of annotations) {
-    if (ann.type === 'file_citation') {
-      const name = fileMap[ann.file_citation.file_id];
-      if (name) {
-        const href = `/docs/${encodeURIComponent(name)}.pdf`;
-        result = result.replace(ann.text, ` [${name}](${href})`);
-      } else {
-        result = result.replace(ann.text, '');
-      }
+function linkifyInlineCitations(text: string, fileMap: Record<string, string>): string {
+  const files = Object.values(fileMap).map((name) => ({
+    name,
+    href: `/docs/${encodeURIComponent(name)}.pdf`,
+    tokens: tokenize(name),
+  }));
+
+  return text.replace(/\(([^)]{8,})\)/g, (match, inner) => {
+    // Use only the part before the first comma as the doc-name hint
+    const docPart = inner.split(',')[0];
+    const docTokens = tokenize(docPart);
+
+    let best: { name: string; href: string } | null = null;
+    let bestScore = 0;
+    for (const f of files) {
+      const score = overlapScore(docTokens, f.tokens);
+      if (score > bestScore) { bestScore = score; best = f; }
     }
-  }
-  // Strip any remaining unresolved markers
-  return result.replace(/【\d+:\d+†[^】]*】/g, '');
+
+    // Require at least one keyword match to avoid false positives
+    return best && bestScore >= 0.4 ? `[(${inner})](${best.href})` : match;
+  });
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -89,17 +110,19 @@ export const POST: RequestHandler = async ({ request }) => {
       );
 
       try {
+        let completedRunId: string | null = null;
+
         for await (const event of stream) {
+          // Stream raw text deltas for the typing effect.
+          // Annotations are incomplete during streaming, so strip markers here
+          // and send the fully-resolved text via a `replace` event on completion.
           if (event.event === 'thread.message.delta' && event.data.delta.content) {
             for (const part of event.data.delta.content) {
               if (part.type === 'text' && part.text?.value) {
-                const annotations = (part.text.annotations ?? []) as OpenAI.Beta.Threads.Messages.Annotation[];
-                const text = resolveAnnotations(part.text.value, annotations, fileMap);
-                if (text) {
+                const raw = part.text.value.replace(/【\d+:\d+†[^】]*】/g, '');
+                if (raw) {
                   controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({ type: 'delta', text })}\n\n`
-                    )
+                    encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: raw })}\n\n`)
                   );
                 }
               }
@@ -114,10 +137,35 @@ export const POST: RequestHandler = async ({ request }) => {
             );
           }
 
+          if (event.event === 'thread.run.completed') {
+            completedRunId = event.data.id;
+          }
+
           if (
             event.event === 'thread.run.completed' ||
             event.event === 'thread.run.failed'
           ) {
+            if (completedRunId) {
+              // Fetch the final message and linkify inline citations
+              const messages = await openai.beta.threads.messages.list(activeThread.id, {
+                limit: 1,
+                order: 'desc',
+              });
+              const finalMsg = messages.data[0];
+              let finalText = '';
+              for (const block of finalMsg?.content ?? []) {
+                if (block.type === 'text') {
+                  const clean = block.text.value.replace(/【\d+:\d+†[^】]*】/g, '');
+                  finalText += linkifyInlineCitations(clean, fileMap);
+                }
+              }
+              if (finalText) {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ type: 'replace', text: finalText })}\n\n`)
+                );
+              }
+            }
+
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
             );
