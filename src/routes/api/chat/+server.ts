@@ -5,12 +5,48 @@ import type { RequestHandler } from './$types';
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
+// Lazy-loaded map of fileId → display name, shared across requests
+let fileNameMap: Record<string, string> | null = null;
+
+async function getFileNameMap(): Promise<Record<string, string>> {
+  if (fileNameMap) return fileNameMap;
+
+  const assistant = await openai.beta.assistants.retrieve(ASSISTANT_ID);
+  const vsIds = assistant.tool_resources?.file_search?.vector_store_ids ?? [];
+
+  const map: Record<string, string> = {};
+  for (const vsId of vsIds) {
+    const files = await openai.vectorStores.files.list(vsId);
+    await Promise.all(
+      files.data.map(async (f) => {
+        const fileObj = await openai.files.retrieve(f.id);
+        map[f.id] = fileObj.filename.replace(/\.pdf$/i, '');
+      })
+    );
+  }
+
+  fileNameMap = map;
+  return map;
+}
+
 /**
- * Strip OpenAI file_search annotation markers like 【4:0†source】
- * before sending text to the client.
+ * Replace 【x:y†source】 markers with [Document Name] using the file map.
+ * Falls back to stripping the marker if the file ID isn't found.
  */
-function stripAnnotations(text: string): string {
-  return text.replace(/【\d+:\d+†[^】]*】/g, '');
+function resolveAnnotations(
+  text: string,
+  annotations: OpenAI.Beta.Threads.Messages.Annotation[],
+  fileMap: Record<string, string>
+): string {
+  let result = text;
+  for (const ann of annotations) {
+    if (ann.type === 'file_citation') {
+      const name = fileMap[ann.file_citation.file_id] ?? 'source';
+      result = result.replace(ann.text, ` [${name}]`);
+    }
+  }
+  // Strip any remaining unresolved markers
+  return result.replace(/【\d+:\d+†[^】]*】/g, '');
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -19,22 +55,20 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Missing message');
   }
 
-  // Accept an existing threadId for multi-turn; create fresh if absent
   const threadId: string | undefined = body.threadId;
 
-  const thread = threadId
-    ? await openai.beta.threads.retrieve(threadId).catch(() => null)
-    : null;
+  const [thread, fileMap] = await Promise.all([
+    threadId ? openai.beta.threads.retrieve(threadId).catch(() => null) : Promise.resolve(null),
+    getFileNameMap(),
+  ]);
 
-  const activeThread =
-    thread ?? (await openai.beta.threads.create());
+  const activeThread = thread ?? (await openai.beta.threads.create());
 
   await openai.beta.threads.messages.create(activeThread.id, {
     role: 'user',
     content: body.message,
   });
 
-  // Stream the run
   const stream = await openai.beta.threads.runs.stream(activeThread.id, {
     assistant_id: ASSISTANT_ID,
   });
@@ -43,7 +77,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const readable = new ReadableStream({
     async start(controller) {
-      // Send the threadId first so the client can persist it
       controller.enqueue(
         encoder.encode(
           `data: ${JSON.stringify({ type: 'thread', threadId: activeThread.id })}\n\n`
@@ -52,17 +85,15 @@ export const POST: RequestHandler = async ({ request }) => {
 
       try {
         for await (const event of stream) {
-          if (
-            event.event === 'thread.message.delta' &&
-            event.data.delta.content
-          ) {
+          if (event.event === 'thread.message.delta' && event.data.delta.content) {
             for (const part of event.data.delta.content) {
               if (part.type === 'text' && part.text?.value) {
-                const clean = stripAnnotations(part.text.value);
-                if (clean) {
+                const annotations = (part.text.annotations ?? []) as OpenAI.Beta.Threads.Messages.Annotation[];
+                const text = resolveAnnotations(part.text.value, annotations, fileMap);
+                if (text) {
                   controller.enqueue(
                     encoder.encode(
-                      `data: ${JSON.stringify({ type: 'delta', text: clean })}\n\n`
+                      `data: ${JSON.stringify({ type: 'delta', text })}\n\n`
                     )
                   );
                 }
