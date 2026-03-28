@@ -138,10 +138,10 @@
       <div class="empty-state">
         <p>Try asking:</p>
         <ul>
-          <li>"Can I paint my front door a different color?"</li>
-          <li>"Are short-term rentals like Airbnb allowed?"</li>
-          <li>"What are the rules about parking in the driveway?"</li>
-          <li>"How many pets am I allowed to have?"</li>
+          <li><button type="button" onclick={() => input = 'Can I paint my front door a different color?'}>Can I paint my front door a different color?</button></li>
+          <li><button type="button" onclick={() => input = 'Are short-term rentals like Airbnb allowed?'}>Are short-term rentals like Airbnb allowed?</button></li>
+          <li><button type="button" onclick={() => input = 'What parking rules are governed by the CC&Rs vs set by the board?'}>What parking rules are governed by the CC&Rs vs set by the board?</button></li>
+          <li><button type="button" onclick={() => input = 'When does the board meet?'}>When does the board meet?</button></li>
         </ul>
       </div>
     {/if}
@@ -260,6 +260,26 @@
   .empty-state li::before {
     content: '→ ';
     color: #2c5f2e;
+  }
+
+  .empty-state li button {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .empty-state li button:focus {
+    outline: none;
+  }
+
+  .empty-state li button:hover {
+    background: none;
+    text-decoration: underline;
   }
 
   .message {
