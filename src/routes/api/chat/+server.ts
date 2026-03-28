@@ -62,25 +62,42 @@ function linkifyInlineCitations(text: string, fileMap: Record<string, string>): 
     tokens: tokenize(name),
   }));
 
-  return text.replace(/\(([^)]{8,})\)/g, (match, inner) => {
-    // Use only the part before the first comma as the doc-name hint
-    const docPart = inner.split(',')[0];
-    const docTokens = tokenize(docPart);
-
+  function bestMatch(hint: string): { name: string; href: string } | null {
+    const tokens = tokenize(hint);
     let best: { name: string; href: string } | null = null;
     let bestScore = 0;
     for (const f of files) {
-      const score = overlapScore(docTokens, f.tokens);
+      const score = overlapScore(tokens, f.tokens);
       if (score > bestScore) { bestScore = score; best = f; }
     }
+    return best && bestScore >= 0.4 ? best : null;
+  }
 
-    if (best && bestScore >= 0.4) {
-      // Replace the hallucinated/paraphrased doc name with the canonical filename
-      const rest = inner.slice(docPart.length); // e.g., ", Item 1"
+  // Pass 1: parenthesized citations like (Parking & Towing Policy, Item 1)
+  let result = text.replace(/\(([^)]{8,})\)/g, (match, inner) => {
+    const docPart = inner.split(',')[0];
+    const best = bestMatch(docPart);
+    if (best) {
+      const rest = inner.slice(docPart.length);
       return `[(${best.name}${rest})](${best.href})`;
     }
     return match;
   });
+
+  // Pass 2: quoted doc names like "Foothills - Bylaws" or 'Foothills - Bylaws'
+  // that were NOT already linkified in pass 1
+  result = result.replace(/["']([^"']{8,})["']/g, (match, inner, offset) => {
+    // Skip if already inside a markdown link (preceded by "[" or "](")
+    const before = result.slice(Math.max(0, offset - 2), offset);
+    if (before.includes('[') || before.includes('(')) return match;
+    const best = bestMatch(inner);
+    if (best) {
+      return `[${match}](/docs/${encodeURIComponent(best.name)}.pdf)`;
+    }
+    return match;
+  });
+
+  return result;
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -105,7 +122,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // Ground the model: exact doc names + strict no-hallucination reminder
   const docList = Object.values(fileMap).sort().map(n => `- ${n}`).join('\n');
-  const additional_instructions = `Available documents (use EXACT names — do not paraphrase or invent):\n${docList}\n\nCRITICAL: If file_search does not return a passage that directly answers the question, respond ONLY with "The governing documents do not address this topic." Never fill in answers from general HOA knowledge or common rules.`;
+  const additional_instructions = `Available documents (use EXACT names — do not paraphrase or invent):\n${docList}\n\nCRITICAL: If file_search does not return a passage that directly answers the question, respond ONLY with "The governing documents do not address this topic." Never fill in answers from general HOA knowledge or common rules.\n\nCITATION FORMAT REMINDER: Every answer — including yes/no answers, direct facts, and follow-up questions about sources — MUST include at least one inline citation in the exact format: (Document Name, locator). Example: (Foothills - Bylaws, Article IV, Section 2). Never reference a document by name without wrapping it in this parenthesized format.`;
 
   const stream = await openai.beta.threads.runs.stream(activeThread.id, {
     assistant_id: ASSISTANT_ID,
