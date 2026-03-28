@@ -34,7 +34,11 @@ const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 
 
 function tokenize(s: string): Set<string> {
   return new Set(
-    s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !STOPWORDS.has(w))
+    s.toLowerCase()
+      .replace(/&/g, '')            // CC&Rs → ccrs (keeps it as one token)
+      .replace(/[^a-z0-9\s]/g, ' ') // strip remaining punctuation
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !STOPWORDS.has(w))
   );
 }
 
