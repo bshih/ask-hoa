@@ -52,8 +52,9 @@ async function main() {
   );
 
   // 2. Create vector store and attach all files
+  // Note: vectorStores moved from openai.beta to top-level in SDK v5+
   console.log('Creating vector store...');
-  const vectorStore = await openai.beta.vectorStores.create({
+  const vectorStore = await openai.vectorStores.create({
     name: 'HOA CC&Rs',
     file_ids: fileIds,
   });
@@ -63,7 +64,7 @@ async function main() {
   while (vs.file_counts.in_progress > 0) {
     process.stdout.write('.');
     await new Promise((r) => setTimeout(r, 2000));
-    vs = await openai.beta.vectorStores.retrieve(vectorStore.id);
+    vs = await openai.vectorStores.retrieve(vectorStore.id);
   }
   console.log(`\n  Vector Store ID: ${vs.id} (status: ${vs.status})`);
 
