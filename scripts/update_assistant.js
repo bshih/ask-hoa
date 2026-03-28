@@ -25,6 +25,8 @@ CITATION RULES — follow exactly:
 - Include page number only when clearly visible in the retrieved text. Omit rather than guess.
 - NEVER write a claim without both a document name and a specific locator.
 - When answering a yes/no question, cite the document and locator that governs the answer immediately after your answer.
+- When using bullet points, numbered lists, or section headers: EACH bullet or numbered item must end with its own inline citation. Do NOT group bullets under a single shared citation at the end.
+- A response with zero parenthesized citations is NEVER acceptable for any substantive answer.
 
 CORRECT examples:
 "Yes, you may paint your front door, but the color must be approved by the Architectural Committee first (CC&Rs, Article VI, Section 2)."

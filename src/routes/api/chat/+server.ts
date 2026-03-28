@@ -122,7 +122,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // Ground the model: exact doc names + strict no-hallucination reminder
   const docList = Object.values(fileMap).sort().map(n => `- ${n}`).join('\n');
-  const additional_instructions = `Available documents (use EXACT names — do not paraphrase or invent):\n${docList}\n\nCRITICAL: If file_search does not return a passage that directly answers the question, respond ONLY with "The governing documents do not address this topic." Never fill in answers from general HOA knowledge or common rules.\n\nCITATION FORMAT REMINDER: Every answer — including yes/no answers, direct facts, and follow-up questions about sources — MUST include at least one inline citation in the exact format: (Document Name, locator). Example: (Foothills - Bylaws, Article IV, Section 2). Never reference a document by name without wrapping it in this parenthesized format.`;
+  const additional_instructions = `Available documents (use EXACT names — do not paraphrase or invent):\n${docList}\n\nCRITICAL: If file_search does not return a passage that directly answers the question, respond ONLY with "The governing documents do not address this topic." Never fill in answers from general HOA knowledge or common rules.\n\nCITATION FORMAT REMINDER: Every answer — including yes/no answers, direct facts, and follow-up questions about sources — MUST include at least one inline citation per claim in the exact format: (Document Name, locator). Example: (Foothills - Bylaws, Article IV, Section 2). Never reference a document by name without wrapping it in this parenthesized format. When using bullet points or numbered lists, EACH bullet/item must end with its own citation — do NOT share a single citation across multiple bullets.`;
 
   const stream = await openai.beta.threads.runs.stream(activeThread.id, {
     assistant_id: ASSISTANT_ID,
@@ -189,6 +189,14 @@ export const POST: RequestHandler = async ({ request }) => {
                   finalText += linkifyInlineCitations(clean, fileMap);
                 }
               }
+              // Warn if a substantive response has no inline citations
+              const isSubstantive = finalText.length > 150 &&
+                !finalText.includes('governing documents do not address');
+              const hasCitation = /\([^)]*,[^)]{2,}\)/.test(finalText);
+              if (isSubstantive && !hasCitation) {
+                finalText += '\n\n---\n*⚠️ Source citations are missing from this response. Please verify all claims against your HOA governing documents.*';
+              }
+
               if (finalText) {
                 controller.enqueue(
                   encoder.encode(`data: ${JSON.stringify({ type: 'replace', text: finalText })}\n\n`)
