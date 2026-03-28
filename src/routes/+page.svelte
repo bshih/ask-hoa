@@ -2,7 +2,14 @@
   import { tick } from 'svelte';
   import { marked } from 'marked';
 
-  marked.use({ breaks: true });
+  marked.use({
+    breaks: true,
+    renderer: {
+      link({ href, text }) {
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+      }
+    }
+  });
 
   type Message = {
     role: 'user' | 'assistant';
