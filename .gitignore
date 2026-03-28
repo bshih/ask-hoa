@@ -18,8 +18,8 @@ Thumbs.db
 !.env.example
 !.env.test
 
-# CC&R source document (keep local, never commit)
-/docs/*.pdf
+# CC&R source documents (keep local, never commit)
+/docs/
 
 # Vite
 vite.config.js.timestamp-*

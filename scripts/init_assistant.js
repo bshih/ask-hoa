@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-time setup: upload CC&R PDF, create vector store + assistant.
+ * One-time setup: upload all PDFs in docs/, create vector store + assistant.
  * Run: node scripts/init_assistant.js
  * Output: prints ASSISTANT_ID — copy it into your .env file.
  *
@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import OpenAI from 'openai';
 
-const PDF_PATH = path.resolve('docs/ccr.pdf');
+const DOCS_DIR = path.resolve('docs');
 const SYSTEM_PROMPT =
   'You are a strict compliance assistant for a homeowners association. ' +
   'Answer using ONLY the provided CC&R document. ' +
@@ -28,27 +28,34 @@ async function main() {
     process.exit(0);
   }
 
-  if (!fs.existsSync(PDF_PATH)) {
-    console.error(`PDF not found at ${PDF_PATH}`);
-    console.error('Place your CC&R document at docs/ccr.pdf and re-run.');
+  const pdfs = fs.readdirSync(DOCS_DIR).filter((f) => f.endsWith('.pdf'));
+  if (pdfs.length === 0) {
+    console.error(`No PDFs found in ${DOCS_DIR}/`);
+    console.error('Copy your CC&R documents there and re-run.');
     process.exit(1);
   }
+  console.log(`Found ${pdfs.length} PDF(s): ${pdfs.join(', ')}`);
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  // 1. Upload PDF
-  console.log('Uploading PDF...');
-  const file = await openai.files.create({
-    file: fs.createReadStream(PDF_PATH),
-    purpose: 'assistants',
-  });
-  console.log(`  File ID: ${file.id}`);
+  // 1. Upload all PDFs
+  console.log('Uploading PDFs...');
+  const fileIds = await Promise.all(
+    pdfs.map(async (name) => {
+      const file = await openai.files.create({
+        file: fs.createReadStream(path.join(DOCS_DIR, name)),
+        purpose: 'assistants',
+      });
+      console.log(`  ${name} → ${file.id}`);
+      return file.id;
+    })
+  );
 
-  // 2. Create vector store and attach file
+  // 2. Create vector store and attach all files
   console.log('Creating vector store...');
   const vectorStore = await openai.beta.vectorStores.create({
     name: 'HOA CC&Rs',
-    file_ids: [file.id],
+    file_ids: fileIds,
   });
 
   // Poll until processing is complete
